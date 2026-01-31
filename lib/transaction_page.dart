@@ -1,0 +1,130 @@
+import 'package:flutter/material.dart';
+import 'database_helper.dart';
+import 'package:intl/intl.dart';
+
+class TransactionPage extends StatefulWidget {
+  @override
+  _TransactionPageState createState() => _TransactionPageState();
+}
+
+class _TransactionPageState extends State<TransactionPage> {
+  final _partyController = TextEditingController();
+  final _amountController = TextEditingController();
+  final _notesController = TextEditingController();
+  final _daysController = TextEditingController(); // Input for Credit Period
+
+  // We keep internal date as ISO for DB, but show user formatted date
+  String _dbDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+  Future<void> _pickDate() async {
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.parse(_dbDate),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() {
+        _dbDate = DateFormat('yyyy-MM-dd').format(picked);
+      });
+    }
+  }
+
+  void _save(String type) async {
+    if (_partyController.text.isEmpty || _amountController.text.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Fill Party & Amount")));
+      return;
+    }
+
+    // Calculate Due Date based on Credit Period
+    int? creditPeriod;
+    if (_daysController.text.isNotEmpty) {
+      creditPeriod = int.tryParse(_daysController.text);
+    }
+
+    await DatabaseHelper.instance.insertTransaction({
+      'type': type,
+      'party': _partyController.text,
+      'amount': double.parse(_amountController.text),
+      'notes': _notesController.text,
+      'date': _dbDate,
+      'credit_period': creditPeriod, // Storing days directly
+      'cleared': 0,
+      'unallocated_amount': 0.0
+    });
+
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text("$type Saved!")));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String type = ModalRoute.of(context)!.settings.arguments as String;
+
+    // Format date for Display (dd-MM-yyyy)
+    String displayDate =
+        DateFormat('dd-MM-yyyy').format(DateTime.parse(_dbDate));
+
+    return Scaffold(
+      appBar: AppBar(title: Text("Add $type Bill")),
+      body: Padding(
+        padding: EdgeInsets.all(20),
+        child: ListView(
+          children: [
+            // Bill Date Picker
+            ListTile(
+              tileColor: Colors.grey[100],
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              title: Text("Bill Date: $displayDate",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              trailing: Icon(Icons.calendar_today, color: Colors.indigo),
+              onTap: _pickDate,
+            ),
+            SizedBox(height: 15),
+
+            TextField(
+                controller: _partyController,
+                decoration: InputDecoration(
+                    labelText: "Party Name", border: OutlineInputBorder())),
+            SizedBox(height: 15),
+
+            TextField(
+                controller: _amountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                    labelText: "Total Amount", border: OutlineInputBorder())),
+            SizedBox(height: 15),
+
+            // Credit Period (Days)
+            TextField(
+                controller: _daysController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                    labelText: "Credit Period (Days)",
+                    hintText: "e.g. 30, 45, 60",
+                    suffixText: "Days",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.timelapse))),
+
+            SizedBox(height: 15),
+            TextField(
+                controller: _notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                    labelText: "Notes", border: OutlineInputBorder())),
+            SizedBox(height: 30),
+            ElevatedButton(
+              onPressed: () => _save(type),
+              child: Text("SAVE BILL"),
+              style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(vertical: 15)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
