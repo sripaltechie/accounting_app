@@ -4,59 +4,83 @@ class Dashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Accounting Ledger - Dashboard")),
+      appBar: AppBar(title: Text("Account Ledger")),
       body: GridView.count(
         padding: EdgeInsets.all(20),
         crossAxisCount: 2,
         crossAxisSpacing: 15,
         mainAxisSpacing: 15,
+        childAspectRatio: 1.1,
         children: [
+          _buildMenuButton(context, "Purchase Bill", Icons.shopping_cart,
+              Colors.green, '/transaction'),
           _buildMenuButton(
-              context, "Purchase", Icons.shopping_cart, Colors.green),
-          _buildMenuButton(context, "Sales", Icons.sell, Colors.blue),
+              context, "Sales Bill", Icons.sell, Colors.blue, '/transaction'),
+
+          _buildActionCard(
+              context, "Receipt (In)", Icons.download, Colors.teal, 'Receipt'),
+          _buildActionCard(context, "Payment (Out)", Icons.upload,
+              Colors.redAccent, 'Payment'),
+
+          _buildMenuButton(context, "Full Ledger", Icons.bar_chart,
+              Colors.deepPurple, '/ledger'),
+          _buildMenuButton(context, "Parties", Icons.people, Colors.indigo,
+              '/parties'), // New Button
+
+          _buildMenuButton(context, "Outstanding", Icons.warning, Colors.orange,
+              '/outstanding'), // New Button
           _buildMenuButton(
-              context, "Receipt (In)", Icons.download, Colors.blue),
-          _buildMenuButton(context, "Payment (Out)", Icons.upload, Colors.blue),
+              context, "Daybook", Icons.menu_book, Colors.purple, '/daybook'),
+
+          _buildMenuButton(context, "Payment Modes", Icons.payment,
+              Colors.blueGrey, '/payment_modes'), // New Button
           _buildMenuButton(
-              context, "Ledger", Icons.account_balance_wallet, Colors.orange),
-          _buildMenuButton(context, "Daybook", Icons.menu_book, Colors.purple),
+              context, "Backup", Icons.backup, Colors.grey, '/backup'),
         ],
       ),
     );
   }
 
-  Widget _buildMenuButton(
-      BuildContext context, String title, IconData icon, Color color) {
+  Widget _buildMenuButton(BuildContext context, String title, IconData icon,
+      Color color, String route) {
     return InkWell(
       onTap: () {
-        // We pass the type (Purchase/Sale) to the transaction page
-        if (title == "Purchase" || title == "Sales") {
-          Navigator.pushNamed(context, '/transaction', arguments: title);
-        } else if (title == "Receipt (In)" || title == "Payment (Out)") {
-          Navigator.pushNamed(context, '/payment', arguments: title);
-        } else if (title == "Ledger") {
-          Navigator.pushNamed(context, '/balances', arguments: title);
-        } else if (title == "Daybook") {
-          Navigator.pushNamed(context, '/daybook', arguments: title);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("$title feature coming soon!")));
-        }
+        if (title.contains("Purchase"))
+          Navigator.pushNamed(context, route, arguments: "Purchase");
+        else if (title.contains("Sales"))
+          Navigator.pushNamed(context, route, arguments: "Sales");
+        else
+          Navigator.pushNamed(context, route);
       },
       child: Card(
-        color: color.withOpacity(0.1),
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-            side: BorderSide(color: color)),
+        elevation: 2,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 50, color: color),
+            Icon(icon, size: 40, color: color),
+            SizedBox(height: 10),
+            Text(title,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionCard(BuildContext context, String title, IconData icon,
+      Color color, String arg) {
+    return InkWell(
+      onTap: () => Navigator.pushNamed(context, '/payment', arguments: arg),
+      child: Card(
+        color: color.withOpacity(0.1),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 40, color: color),
             SizedBox(height: 10),
             Text(title,
                 style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+                    fontSize: 16, fontWeight: FontWeight.bold, color: color)),
           ],
         ),
       ),
