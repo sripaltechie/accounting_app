@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'database_helper.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart'; // Ensure this package is added to pubspec.yaml
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class LedgerPage extends StatefulWidget {
   @override
@@ -15,7 +20,7 @@ class _LedgerPageState extends State<LedgerPage> {
 
   List<Map<String, dynamic>> _bills = [];
   List<Map<String, dynamic>> _payments = [];
-  String? _mobileNumber; // Store fetched mobile number
+  String? _mobileNumber;
 
   bool _isLoading = false;
   bool _hasSearched = false;
@@ -63,13 +68,10 @@ class _LedgerPageState extends State<LedgerPage> {
       _hasSearched = true;
     });
 
-    // 1. Fetch Transactions
     var bills = await DatabaseHelper.instance
         .getLedgerBills(_partyController.text, _fromStr, _toStr);
     var payments = await DatabaseHelper.instance
         .getLedgerPayments(_partyController.text, _fromStr, _toStr);
-
-    // 2. Fetch Party Details (for Mobile)
     var partyData = await DatabaseHelper.instance
         .getPartyByName(_partyController.text.trim());
 
@@ -81,6 +83,148 @@ class _LedgerPageState extends State<LedgerPage> {
     });
   }
 
+  // --- PDF GENERATION & SHARE ---
+  Future<void> _generateAndSharePdf() async {
+    if (_bills.isEmpty && _payments.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("No data to generate PDF")));
+      return;
+    }
+
+    final pdf = pw.Document();
+
+    // Calculate Totals
+    double totalBills =
+        _bills.fold(0, (sum, item) => sum + (item['amount'] as num));
+    double totalReceived =
+        _payments.fold(0, (sum, item) => sum + (item['amount'] as num));
+    double netOutstanding = totalBills - totalReceived;
+
+    // Define Fonts/Styles
+    final titleStyle =
+        pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold);
+    final headerStyle =
+        pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold);
+    final regularStyle = pw.TextStyle(fontSize: 12);
+
+    pdf.addPage(pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return [
+            // Header
+            pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text("Hithvi Ledger", style: titleStyle),
+                        pw.Text("Ledger Statement", style: headerStyle),
+                      ]),
+                  pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text("Party: ${_partyController.text}",
+                            style: headerStyle),
+                        pw.Text(
+                            "From: ${_displayDate(_fromStr)} To: ${_displayDate(_toStr)}",
+                            style: regularStyle),
+                        if (_mobileNumber != null)
+                          pw.Text("Mobile: $_mobileNumber",
+                              style: regularStyle),
+                      ])
+                ]),
+            pw.Divider(),
+            pw.SizedBox(height: 20),
+
+            // Summary
+            pw.Container(
+                padding: pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border.all()),
+                child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                    children: [
+                      pw.Column(children: [
+                        pw.Text("Total Billed"),
+                        pw.Text("Rs. ${totalBills.toStringAsFixed(2)}",
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold))
+                      ]),
+                      pw.Column(children: [
+                        pw.Text("Total Received"),
+                        pw.Text("Rs. ${totalReceived.toStringAsFixed(2)}",
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold))
+                      ]),
+                      pw.Column(children: [
+                        pw.Text("Net Outstanding"),
+                        pw.Text("Rs. ${netOutstanding.toStringAsFixed(2)}",
+                            style: pw.TextStyle(
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.red))
+                      ]),
+                    ])),
+            pw.SizedBox(height: 20),
+
+            // Bills Table
+            pw.Text("Invoices / Bills", style: headerStyle),
+            pw.SizedBox(height: 5),
+            pw.TableHelper.fromTextArray(
+              headers: ['Date', 'Bill ID', 'Notes', 'Amount', 'Status'],
+              data: _bills
+                  .map((item) => [
+                        _displayDate(item['date']),
+                        item['id'].toString(),
+                        item['notes'] ?? '',
+                        item['amount'].toString(),
+                        item['cleared'] == 1 ? "Cleared" : "Pending"
+                      ])
+                  .toList(),
+              border: pw.TableBorder.all(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+            ),
+            pw.SizedBox(height: 20),
+
+            // Payments Table
+            pw.Text("Payments & Receipts", style: headerStyle),
+            pw.SizedBox(height: 5),
+            pw.TableHelper.fromTextArray(
+              headers: ['Date', 'Type', 'Mode', 'Notes', 'Amount'],
+              data: _payments
+                  .map((item) => [
+                        _displayDate(item['date']),
+                        item['type'],
+                        item['payment_mode'] ?? 'Cash',
+                        item['notes'] ?? '',
+                        item['amount'].toString(),
+                      ])
+                  .toList(),
+              border: pw.TableBorder.all(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+            ),
+
+            pw.SizedBox(height: 20),
+            pw.Divider(),
+            pw.Center(
+                child: pw.Text("Generated by Hithvi Ledger App",
+                    style: pw.TextStyle(color: PdfColors.grey)))
+          ];
+        }));
+
+    // Save File
+    final output = await getTemporaryDirectory();
+    final file = File("${output.path}/Ledger_${_partyController.text}.pdf");
+    await file.writeAsBytes(await pdf.save());
+
+    // Share File
+    // Note: Standard WhatsApp API does not allow attaching a file to a specific number programmatically.
+    // The best practice is to open the Share Sheet. The user selects WhatsApp -> Contact.
+    await Share.shareXFiles([XFile(file.path)],
+        text:
+            "Hello ${_partyController.text}, please find the attached ledger statement. Net Outstanding: Rs. ${netOutstanding.toStringAsFixed(2)}");
+  }
+
+  // --- WHATSAPP TEXT LAUNCHER ---
   void _launchWhatsApp() async {
     if (_mobileNumber == null || _mobileNumber!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,28 +232,22 @@ class _LedgerPageState extends State<LedgerPage> {
       return;
     }
 
-    // 1. Calculate Outstanding
     double totalBills =
         _bills.fold(0, (sum, item) => sum + (item['amount'] as num));
     double totalReceived =
         _payments.fold(0, (sum, item) => sum + (item['amount'] as num));
     double netOutstanding = totalBills - totalReceived;
 
-    // 2. Determine "Criticality" for message (Overdue vs Due Soon)
     DateTime today = DateTime.now();
     int maxOverdueDays = -9999;
 
-    // Check all uncleared visible bills to find the worst status
     for (var bill in _bills) {
       if (bill['cleared'] == 0) {
         DateTime billDate = DateTime.parse(bill['date']);
         int creditDays = bill['credit_period'] ?? 0;
         DateTime dueDate = billDate.add(Duration(days: creditDays));
         int diff = today.difference(dueDate).inDays;
-
-        if (diff > maxOverdueDays) {
-          maxOverdueDays = diff;
-        }
+        if (diff > maxOverdueDays) maxOverdueDays = diff;
       }
     }
 
@@ -120,11 +258,9 @@ class _LedgerPageState extends State<LedgerPage> {
       statusMsg = "Your bill is due in ${maxOverdueDays.abs()} days.";
     }
 
-    // 3. Construct Message
     String message =
-        "Hello ${_partyController.text}, your total outstanding balance with JP Enterprises is ₹${netOutstanding.toStringAsFixed(2)}. $statusMsg Please pay at the earliest.";
+        "Hello ${_partyController.text}, your total outstanding balance with Hithvi Creations is Rs. ${netOutstanding.toStringAsFixed(2)}. $statusMsg Please pay at the earliest.";
 
-    // 4. Launch URL
     final Uri url = Uri.parse(
         "https://wa.me/+91$_mobileNumber?text=${Uri.encodeComponent(message)}");
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
@@ -133,7 +269,6 @@ class _LedgerPageState extends State<LedgerPage> {
     }
   }
 
-  // ... (Keep existing _editTransaction, _deleteTransaction, _showLinkPopup methods as is) ...
   void _editTransaction(Map<String, dynamic> trans) {
     String route = (trans['type'] == 'Purchase' || trans['type'] == 'Sales')
         ? '/transaction'
@@ -252,13 +387,19 @@ class _LedgerPageState extends State<LedgerPage> {
       appBar: AppBar(
         title: Text("Ledger Report"),
         actions: [
+          // PDF Share Button
+          IconButton(
+            icon: Icon(Icons.picture_as_pdf),
+            tooltip: "Share PDF",
+            onPressed: _generateAndSharePdf,
+          ),
+          // WhatsApp Text Button
           if (_mobileNumber != null && _mobileNumber!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 10),
               child: IconButton(
-                icon: Icon(Icons.message,
-                    color: Colors.greenAccent), // WhatsApp Icon placeholder
-                tooltip: "WhatsApp Reminder",
+                icon: Icon(Icons.message, color: Colors.greenAccent),
+                tooltip: "WhatsApp Text",
                 onPressed: _launchWhatsApp,
               ),
             )
@@ -452,13 +593,6 @@ class _LedgerPageState extends State<LedgerPage> {
           )
         ],
       ),
-      floatingActionButton: (_mobileNumber != null && _mobileNumber!.isNotEmpty)
-          ? FloatingActionButton(
-              backgroundColor: Colors.green,
-              child: Icon(Icons.message), // WhatsApp FAB
-              onPressed: _launchWhatsApp,
-            )
-          : null,
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'package:accouting_app/license_page.dart';
 import 'package:accouting_app/paymentmode_page.dart';
 import 'package:flutter/material.dart';
 import 'package:workmanager/workmanager.dart';
@@ -44,6 +45,7 @@ class HithviLedgerApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => LoginPage(),
+        '/license': (context) => AppActivationPage(),
         '/dashboard': (context) => Dashboard(),
         '/transaction': (context) => TransactionPage(),
         '/daybook': (context) => DaybookPage(),

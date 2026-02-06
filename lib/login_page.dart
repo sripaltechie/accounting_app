@@ -1,3 +1,4 @@
+import 'package:accouting_app/license_service.dart';
 import 'package:flutter/material.dart';
 import 'database_helper.dart';
 
@@ -8,6 +9,28 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _pinController = TextEditingController();
+  bool _checkingLicense = true; // <--- ADD STATE VARIABLE
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAppLicense();
+  }
+
+  void _checkAppLicense() async {
+    // 1. Ask Server if Device ID is valid
+    final result = await LicenseService.checkStatus();
+
+    if (result['status'] == 'active') {
+      // Valid! Stop loading and show PIN screen
+      setState(() {
+        _checkingLicense = false;
+      });
+    } else {
+      // Expired or New User -> Send to Activation Page
+      Navigator.pushReplacementNamed(context, '/license');
+    }
+  }
 
   void _verify() async {
     String input = _pinController.text;
