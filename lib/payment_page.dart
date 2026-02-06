@@ -13,12 +13,53 @@ class _PaymentPageState extends State<PaymentPage> {
   final TextEditingController _partyController = TextEditingController();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
-  String _dbDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-  // State for Linking
+  String _dbDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  List<String> _paymentModes = ['Cash'];
+  String _selectedMode = 'Cash';
+
   List<Map<String, dynamic>> _pendingBills = [];
-  final Map<int, double> _allocations = {}; // invoice_id -> allocated_amount
+  Map<int, double> _allocations = {};
   bool _isLoadingBills = false;
+
+  // Edit Mode
+  bool _isEdit = false;
+  int? _editId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPaymentModes();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isEdit) {
+      // Only load once
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args != null && args is Map && args.containsKey('data')) {
+        final data = args['data'];
+        _isEdit = true;
+        _editId = data['id'];
+        _partyController.text = data['party'];
+        _amountController.text = data['amount'].toString();
+        _notesController.text = data['notes'] ?? '';
+        _dbDate = data['date'];
+        _selectedMode = data['payment_mode'] ?? 'Cash';
+      }
+    }
+  }
+
+  void _loadPaymentModes() async {
+    final modes = await DatabaseHelper.instance.getPaymentModes();
+    setState(() {
+      _paymentModes = modes;
+      if (!_paymentModes.contains(_selectedMode)) {
+        _selectedMode = _paymentModes.isNotEmpty ? _paymentModes.first : 'Cash';
+      }
+    });
+  }
 
   Future<void> _pickDate() async {
     DateTime? picked = await showDatePicker(
@@ -36,29 +77,28 @@ class _PaymentPageState extends State<PaymentPage> {
 
   Future<void> _fetchPendingBills() async {
     if (_partyController.text.isEmpty) return;
-    FocusScope.of(context).unfocus(); // Close keyboard
+    FocusScope.of(context).unfocus();
     setState(() => _isLoadingBills = true);
-    final String type = ModalRoute.of(context)!.settings.arguments as String;
 
-    // Fetch bills from DB
+    // Determine type
+    final args = ModalRoute.of(context)!.settings.arguments;
+    String type = (args is Map) ? args['type'] : args as String;
+
     List<Map<String, dynamic>> bills = await DatabaseHelper.instance
-        .getPendingInvoices(_partyController.text, type);
+        .getPendingInvoices(_partyController.text.trim(), type);
 
     setState(() {
       _pendingBills = bills;
       _isLoadingBills = false;
-      _allocations.clear(); // Reset previous allocations
+      _allocations.clear();
     });
   }
 
   void _allocateAmount(int invoiceId, double maxPending) {
-    // Basic logic: Try to allocate full pending amount if payment pool allows
-    // For this simple version, we toggle full allocation
     setState(() {
       if (_allocations.containsKey(invoiceId)) {
         _allocations.remove(invoiceId);
       } else {
-        // Calculate remaining money in hand
         double totalEntered = double.tryParse(_amountController.text) ?? 0.0;
         double alreadyUsed =
             _allocations.values.fold(0, (sum, item) => sum + item);
@@ -79,32 +119,55 @@ class _PaymentPageState extends State<PaymentPage> {
 
   void _savePayment() async {
     double totalAmount = double.tryParse(_amountController.text) ?? 0.0;
-    if (totalAmount <= 0 || _partyController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Enter Party and valid Amount")));
-      return;
+    if (totalAmount <= 0 || _partyController.text.isEmpty) return;
+
+    // Handle Arguments safely
+    final args = ModalRoute.of(context)!.settings.arguments;
+    String type = (args is Map) ? args['type'] : args as String;
+
+    // Auto-create party
+    final partyExists = await DatabaseHelper.instance
+        .getPartyByName(_partyController.text.trim());
+    if (partyExists == null) {
+      await DatabaseHelper.instance
+          .insertParty({'name': _partyController.text.trim(), 'mobile': ''});
     }
 
-    double allocatedTotal =
-        _allocations.values.fold(0, (sum, item) => sum + item);
-    final String type = ModalRoute.of(context)!.settings.arguments as String;
+    if (_isEdit) {
+      // Update basic info only (Allocations are preserved for simplicity in this version)
+      // Recalculating allocations on edit is complex; we assume user deletes and re-enters if deep changes needed.
+      // Here we just update the text fields.
+      await DatabaseHelper.instance.updateTransaction({
+        'id': _editId,
+        'party': _partyController.text.trim(),
+        'amount': totalAmount,
+        'date': _dbDate,
+        'notes': _notesController.text,
+        'payment_mode': _selectedMode,
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Updated (Links preserved)")));
+    } else {
+      double allocatedTotal =
+          _allocations.values.fold(0, (sum, item) => sum + item);
+      List<Map<String, dynamic>> allocationList = [];
+      _allocations.forEach((invId, amt) {
+        allocationList.add({'invoice_id': invId, 'amount': amt});
+      });
 
-    // Prepare Allocation List
-    List<Map<String, dynamic>> allocationList = [];
-    _allocations.forEach((invId, amt) {
-      allocationList.add({'invoice_id': invId, 'amount': amt});
-    });
-
-    // Save to DB
-    await DatabaseHelper.instance.createPaymentWithAllocations({
-      'type': type,
-      'party': _partyController.text,
-      'amount': totalAmount,
-      'date': _dbDate,
-      'notes': _notesController.text,
-      'unallocated_amount': totalAmount - allocatedTotal,
-      'cleared': 0 // Not relevant for payment record itself
-    }, allocationList);
+      await DatabaseHelper.instance.createPaymentWithAllocations({
+        'type': type,
+        'party': _partyController.text.trim(),
+        'amount': totalAmount,
+        'date': _dbDate,
+        'notes': _notesController.text,
+        'payment_mode': _selectedMode,
+        'unallocated_amount': totalAmount - allocatedTotal,
+        'cleared': 0
+      }, allocationList);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Payment Saved!")));
+    }
 
     Navigator.pop(context);
     ScaffoldMessenger.of(context)
@@ -113,7 +176,9 @@ class _PaymentPageState extends State<PaymentPage> {
 
   @override
   Widget build(BuildContext context) {
-    final String type = ModalRoute.of(context)!.settings.arguments as String;
+    final args = ModalRoute.of(context)!.settings.arguments;
+    String type = (args is Map) ? args['type'] : args as String;
+
     double totalAmount = double.tryParse(_amountController.text) ?? 0.0;
     double usedAmount = _allocations.values.fold(0, (sum, item) => sum + item);
     double remaining = totalAmount - usedAmount;
@@ -122,155 +187,141 @@ class _PaymentPageState extends State<PaymentPage> {
         DateFormat('dd-MM-yyyy').format(DateTime.parse(_dbDate));
 
     return Scaffold(
-      appBar: AppBar(title: Text("$type Entry")),
+      appBar: AppBar(title: Text(_isEdit ? "Edit $type" : "$type Entry")),
       body: Column(
         children: [
-          // 1. Top Section: Details
           Container(
             padding: const EdgeInsets.all(15),
             color: Colors.blue[50],
             child: Column(
               children: [
+                InkWell(
+                  onTap: _pickDate,
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_today,
+                          size: 18, color: Colors.indigo),
+                      SizedBox(width: 8),
+                      Text("Date: $displayDate",
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                ),
+                Divider(),
+                Autocomplete<String>(
+                  optionsBuilder: (val) async => val.text == ''
+                      ? []
+                      : await DatabaseHelper.instance
+                          .getMatchingParties(val.text),
+                  onSelected: (val) {
+                    _partyController.text = val;
+                    if (!_isEdit) _fetchPendingBills();
+                  },
+                  fieldViewBuilder:
+                      (context, controller, focusNode, onFieldSubmitted) {
+                    if (controller.text != _partyController.text)
+                      controller.text = _partyController.text;
+                    return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        onChanged: (val) => _partyController.text = val,
+                        decoration: InputDecoration(
+                            labelText: "Party Name",
+                            filled: true,
+                            fillColor: Colors.white));
+                  },
+                ),
+                SizedBox(height: 10),
                 Row(
                   children: [
-                    // Date Picker Row
-                    InkWell(
-                      onTap: _pickDate,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_today,
-                              size: 18, color: Colors.indigo),
-                          const SizedBox(width: 8),
-                          Text("Date: $displayDate",
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16)),
-                          const Spacer(),
-                          const Text("Change", style: TextStyle(color: Colors.blue)),
-                        ],
-                      ),
-                    ),
-                    const Divider(),
-
-                    // Autocomplete for Party Name
                     Expanded(
-                      child: Autocomplete<String>(
-                        optionsBuilder:
-                            (TextEditingValue textEditingValue) async {
-                          if (textEditingValue.text == '') {
-                            return const Iterable<String>.empty();
-                          }
-                          return await DatabaseHelper.instance
-                              .getMatchingParties(textEditingValue.text);
-                        },
-                        onSelected: (String selection) {
-                          _partyController.text = selection;
-                          _fetchPendingBills(); // Auto-fetch when selected from list
-                        },
-                        fieldViewBuilder: (context, textEditingController,
-                            focusNode, onFieldSubmitted) {
-                          // Sync the autocomplete controller with our logic controller
-                          if (textEditingController.text !=
-                              _partyController.text) {
-                            textEditingController.text = _partyController.text;
-                          }
-
-                          return TextField(
-                            controller: textEditingController,
-                            focusNode: focusNode,
-                            onChanged: (val) => _partyController.text = val,
-                            decoration: const InputDecoration(
-                                labelText: "Party Name",
-                                filled: true,
-                                fillColor: Colors.white,
-                                hintText: "Start typing..."),
-                          );
-                        },
+                      child: TextField(
+                        controller: _amountController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                            labelText: "Amount",
+                            filled: true,
+                            fillColor: Colors.white),
+                        onChanged: (val) => setState(() {}),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.search),
-                      onPressed: _fetchPendingBills,
-                      tooltip: "Fetch Pending Bills",
-                    )
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedMode,
+                        decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white,
+                            labelText: "Mode"),
+                        items: _paymentModes
+                            .map((m) =>
+                                DropdownMenuItem(value: m, child: Text(m)))
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedMode = val!),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _amountController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      labelText: "Amount Received/Paid",
-                      filled: true,
-                      fillColor: Colors.white),
-                  onChanged: (val) => setState(() {}),
-                ),
-                const SizedBox(height: 10),
-                Text("Used: ₹$usedAmount  |  Not Used: ₹$remaining",
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: remaining < 0 ? Colors.red : Colors.green)),
+                if (!_isEdit)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text("Used: ₹$usedAmount  |  Not Used: ₹$remaining",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: remaining < 0 ? Colors.red : Colors.green)),
+                  ),
               ],
             ),
           ),
 
-          // 2. Middle Section: Pending Invoices List
-          Expanded(
-            child: _isLoadingBills
-                ? const Center(child: CircularProgressIndicator())
-                : _pendingBills.isEmpty
-                    ? const Center(
-                        child: Text("No pending bills or select party first"))
-                    : ListView.builder(
-                        itemCount: _pendingBills.length,
-                        itemBuilder: (context, index) {
-                          var bill = _pendingBills[index];
-                          bool isSelected =
-                              _allocations.containsKey(bill['id']);
-                          // Format Bill Date
-                          String bDate = DateFormat('dd-MM-yyyy')
-                              .format(DateTime.parse(bill['date']));
-                          return Card(
-                            color:
-                                isSelected ? Colors.green[100] : Colors.white,
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            child: ListTile(
-                              leading: Checkbox(
-                                value: isSelected,
-                                onChanged: (val) => _allocateAmount(
-                                    bill['id'], bill['pending_amount']),
+          // Only show pending bills allocation on CREATE, hide on EDIT to avoid complexity
+          if (!_isEdit)
+            Expanded(
+              child: _isLoadingBills
+                  ? Center(child: CircularProgressIndicator())
+                  : _pendingBills.isEmpty
+                      ? Center(
+                          child: Text("No pending bills or select party first"))
+                      : ListView.builder(
+                          itemCount: _pendingBills.length,
+                          itemBuilder: (context, index) {
+                            var bill = _pendingBills[index];
+                            bool isSelected =
+                                _allocations.containsKey(bill['id']);
+                            String bDate = DateFormat('dd-MM-yyyy')
+                                .format(DateTime.parse(bill['date']));
+                            return Card(
+                              color:
+                                  isSelected ? Colors.green[100] : Colors.white,
+                              child: ListTile(
+                                leading: Checkbox(
+                                    value: isSelected,
+                                    onChanged: (val) => _allocateAmount(
+                                        bill['id'], bill['pending_amount'])),
+                                title: Text("Bill Date: $bDate"),
+                                subtitle: Text(
+                                    "Total: ₹${bill['amount']} | Pending: ₹${bill['pending_amount']}"),
                               ),
-                              title: Text("Bill Date: $bDate"),
-                              subtitle: Text(
-                                  "Total: ₹${bill['amount']} | Pending: ₹${bill['pending_amount']}"),
-                              trailing: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text("Allocated",
-                                      style: TextStyle(fontSize: 10)),
-                                  Text(
-                                      isSelected
-                                          ? "₹${_allocations[bill['id']]}"
-                                          : "-",
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black)),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
+                            );
+                          },
+                        ),
+            )
+          else
+            Expanded(
+                child: Center(
+                    child: Text(
+                        "Editing Amount/Date only.\nDelete and Re-enter if allocations need change.",
+                        textAlign: TextAlign.center))),
 
-          // 3. Bottom Section: Save Button
           Padding(
             padding: const EdgeInsets.all(15),
             child: ElevatedButton(
               onPressed: _savePayment,
+              child: Text(_isEdit ? "UPDATE" : "SAVE TRANSACTION"),
               style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50)),
-              child: Text("SAVE TRANSACTION"),
+                  minimumSize: Size(double.infinity, 50)),
             ),
           )
         ],

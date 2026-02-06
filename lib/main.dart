@@ -1,15 +1,21 @@
-import 'package:accouting_app/balance_page.dart';
-import 'package:accouting_app/daybook_page.dart';
+import 'package:accouting_app/license_page.dart';
+import 'package:accouting_app/paymentmode_page.dart';
 import 'package:flutter/material.dart';
-import 'login_page.dart';
-import 'dashboard.dart';
-import 'payment_page.dart';
-import 'transaction_page.dart';
 import 'package:workmanager/workmanager.dart';
 import 'database_helper.dart';
 import 'dart:io';
 
-const autoBackupTask = "com.accounting.autoBackup";
+import 'login_page.dart';
+import 'dashboard.dart';
+import 'transaction_page.dart';
+import 'daybook_page.dart';
+import 'backup_page.dart';
+import 'payment_page.dart';
+import 'ledger_page.dart';
+import 'party_page.dart'; // New Import
+import 'outstanding_page.dart'; // New Import
+
+const autoBackupTask = "com.hithvi.autoBackup";
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -25,8 +31,6 @@ void callbackDispatcher() {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Workmanager
   await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
 
   // Schedule the 7 AM backup
@@ -40,7 +44,7 @@ void _scheduleDailyBackup() {
   var firstTime = DateTime(now.year, now.month, now.day, 7, 0); // 7:00 AM
 
   if (firstTime.isBefore(now)) {
-    firstTime = firstTime.add(const Duration(days: 1));
+    firstTime = firstTime.add(Duration(days: 1));
   }
 
   final initialDelay = firstTime.difference(now);
@@ -48,7 +52,7 @@ void _scheduleDailyBackup() {
   Workmanager().registerPeriodicTask(
     "1",
     autoBackupTask,
-    frequency: const Duration(hours: 24),
+    frequency: Duration(hours: 24),
     initialDelay: initialDelay,
     constraints: Constraints(
       networkType: NetworkType.not_required,
@@ -58,23 +62,25 @@ void _scheduleDailyBackup() {
 }
 
 class AccountingApp extends StatelessWidget {
-  const AccountingApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Accounting Ledger',
-      theme: ThemeData(primarySwatch: Colors.indigo),
+      title: 'Account Ledger',
+      theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: false),
       initialRoute: '/',
-      // Update your routes in main.dart
       routes: {
         '/': (context) => LoginPage(),
+        '/license': (context) => AppActivationPage(),
         '/dashboard': (context) => Dashboard(),
         '/transaction': (context) => TransactionPage(),
-        '/payment': (context) => PaymentPage(),
         '/daybook': (context) => DaybookPage(),
-        '/balances': (context) => BalancePage(),
+        '/backup': (context) => BackupPage(),
+        '/payment': (context) => PaymentPage(),
+        '/ledger': (context) => LedgerPage(),
+        '/payment_modes': (context) => PaymentModePage(),
+        '/parties': (context) => PartyPage(), // New Route
+        '/outstanding': (context) => OutstandingPage(), // New Route
       },
     );
   }

@@ -13,10 +13,36 @@ class _TransactionPageState extends State<TransactionPage> {
   final _partyController = TextEditingController();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
-  final _daysController = TextEditingController(); // Input for Credit Period
+  final _daysController = TextEditingController();
 
-  // We keep internal date as ISO for DB, but show user formatted date
   String _dbDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+  // Edit Mode variables
+  bool _isEdit = false;
+  int? _editId;
+  bool _isInit = false; // Added flag to prevent data reset
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Only load arguments once to prevent resetting data when DatePicker closes
+    if (!_isInit) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args != null && args is Map) {
+        if (args.containsKey('data')) {
+          final data = args['data'];
+          _isEdit = true;
+          _editId = data['id'];
+          _partyController.text = data['party'];
+          _amountController.text = data['amount'].toString();
+          _notesController.text = data['notes'] ?? '';
+          _daysController.text = (data['credit_period'] ?? '').toString();
+          _dbDate = data['date'];
+        }
+      }
+      _isInit = true;
+    }
+  }
 
   Future<void> _pickDate() async {
     DateTime? picked = await showDatePicker(
@@ -39,43 +65,65 @@ class _TransactionPageState extends State<TransactionPage> {
       return;
     }
 
-    // Calculate Due Date based on Credit Period
     int? creditPeriod;
     if (_daysController.text.isNotEmpty) {
       creditPeriod = int.tryParse(_daysController.text);
     }
 
-    await DatabaseHelper.instance.insertTransaction({
-      'type': type,
-      'party': _partyController.text,
-      'amount': double.parse(_amountController.text),
-      'notes': _notesController.text,
-      'date': _dbDate,
-      'credit_period': creditPeriod, // Storing days directly
-      'cleared': 0,
-      'unallocated_amount': 0.0
-    });
+    // Auto-create party if not exists
+    final partyExists = await DatabaseHelper.instance
+        .getPartyByName(_partyController.text.trim());
+    if (partyExists == null) {
+      await DatabaseHelper.instance
+          .insertParty({'name': _partyController.text.trim(), 'mobile': ''});
+    }
+
+    if (_isEdit) {
+      await DatabaseHelper.instance.updateTransaction({
+        'id': _editId,
+        'party': _partyController.text.trim(),
+        'amount': double.parse(_amountController.text),
+        'notes': _notesController.text,
+        'date': _dbDate,
+        'credit_period': creditPeriod,
+      });
+    } else {
+      await DatabaseHelper.instance.insertTransaction({
+        'type': type,
+        'party': _partyController.text.trim(),
+        'amount': double.parse(_amountController.text),
+        'notes': _notesController.text,
+        'date': _dbDate,
+        'credit_period': creditPeriod,
+        'cleared': 0,
+        'unallocated_amount': 0.0
+      });
+    }
 
     Navigator.pop(context);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text("$type Saved!")));
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_isEdit ? "Updated!" : "$type Saved!")));
   }
 
   @override
   Widget build(BuildContext context) {
-    final String type = ModalRoute.of(context)!.settings.arguments as String;
+    // Handle Arguments safely for the Title
+    final args = ModalRoute.of(context)!.settings.arguments;
+    String type = "";
+    if (args is String)
+      type = args;
+    else if (args is Map) type = args['type'];
 
-    // Format date for Display (dd-MM-yyyy)
     String displayDate =
         DateFormat('dd-MM-yyyy').format(DateTime.parse(_dbDate));
 
     return Scaffold(
-      appBar: AppBar(title: Text("Add $type Bill")),
+      appBar:
+          AppBar(title: Text(_isEdit ? "Edit $type Bill" : "Add $type Bill")),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: ListView(
           children: [
-            // Bill Date Picker
             ListTile(
               tileColor: Colors.grey[100],
               shape: RoundedRectangleBorder(
@@ -87,12 +135,24 @@ class _TransactionPageState extends State<TransactionPage> {
             ),
             const SizedBox(height: 15),
 
-            TextField(
-                controller: _partyController,
-                decoration: const InputDecoration(
-                    labelText: "Party Name", border: OutlineInputBorder())),
-            const SizedBox(height: 15),
-
+            // Autocomplete Party
+            Autocomplete<String>(
+              optionsBuilder: (val) async => val.text == ''
+                  ? []
+                  : await DatabaseHelper.instance.getMatchingParties(val.text),
+              onSelected: (val) => _partyController.text = val,
+              fieldViewBuilder: (ctx, controller, focus, onSub) {
+                if (controller.text != _partyController.text)
+                  controller.text = _partyController.text;
+                return TextField(
+                    controller: controller,
+                    focusNode: focus,
+                    onChanged: (val) => _partyController.text = val,
+                    decoration: InputDecoration(
+                        labelText: "Party Name", border: OutlineInputBorder()));
+              },
+            ),
+            SizedBox(height: 15),
             TextField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
@@ -106,8 +166,6 @@ class _TransactionPageState extends State<TransactionPage> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                     labelText: "Credit Period (Days)",
-                    hintText: "e.g. 30, 45, 60",
-                    suffixText: "Days",
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.timelapse))),
 
@@ -120,9 +178,10 @@ class _TransactionPageState extends State<TransactionPage> {
             const SizedBox(height: 30),
             ElevatedButton(
               onPressed: () => _save(type),
+              child: Text(_isEdit ? "UPDATE BILL" : "SAVE BILL"),
               style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 15)),
-              child: Text("SAVE BILL"),
+              // child: Text("SAVE BILL"),
             ),
           ],
         ),

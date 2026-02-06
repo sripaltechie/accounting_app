@@ -1,3 +1,17 @@
+buildscript {
+    ext.kotlin_version = '1.8.22' // Forces a modern Kotlin version
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        // Updated Gradle plugin to handle newer Android features
+        classpath 'com.android.tools.build:gradle:7.4.2'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
 allprojects {
     repositories {
         google()
@@ -16,6 +30,8 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
+// This is your fix for duplicate classes
 subprojects {
     project.configurations.all {
         resolutionStrategy.eachDependency { details ->
