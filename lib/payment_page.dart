@@ -3,6 +3,8 @@ import 'database_helper.dart';
 import 'package:intl/intl.dart';
 
 class PaymentPage extends StatefulWidget {
+  const PaymentPage({super.key});
+
   @override
   _PaymentPageState createState() => _PaymentPageState();
 }
@@ -15,7 +17,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
   // State for Linking
   List<Map<String, dynamic>> _pendingBills = [];
-  Map<int, double> _allocations = {}; // invoice_id -> allocated_amount
+  final Map<int, double> _allocations = {}; // invoice_id -> allocated_amount
   bool _isLoadingBills = false;
 
   Future<void> _pickDate() async {
@@ -64,7 +66,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
         if (remaining <= 0) {
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("No amount left to allocate!")));
+              const SnackBar(content: Text("No amount left to allocate!")));
           return;
         }
 
@@ -79,7 +81,7 @@ class _PaymentPageState extends State<PaymentPage> {
     double totalAmount = double.tryParse(_amountController.text) ?? 0.0;
     if (totalAmount <= 0 || _partyController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Enter Party and valid Amount")));
+          const SnackBar(content: Text("Enter Party and valid Amount")));
       return;
     }
 
@@ -106,7 +108,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
     Navigator.pop(context);
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text("Payment Saved & Linked!")));
+        .showSnackBar(const SnackBar(content: Text("Payment Saved & Linked!")));
   }
 
   @override
@@ -125,7 +127,7 @@ class _PaymentPageState extends State<PaymentPage> {
         children: [
           // 1. Top Section: Details
           Container(
-            padding: EdgeInsets.all(15),
+            padding: const EdgeInsets.all(15),
             color: Colors.blue[50],
             child: Column(
               children: [
@@ -136,18 +138,18 @@ class _PaymentPageState extends State<PaymentPage> {
                       onTap: _pickDate,
                       child: Row(
                         children: [
-                          Icon(Icons.calendar_today,
+                          const Icon(Icons.calendar_today,
                               size: 18, color: Colors.indigo),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text("Date: $displayDate",
-                              style: TextStyle(
+                              style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 16)),
-                          Spacer(),
-                          Text("Change", style: TextStyle(color: Colors.blue)),
+                          const Spacer(),
+                          const Text("Change", style: TextStyle(color: Colors.blue)),
                         ],
                       ),
                     ),
-                    Divider(),
+                    const Divider(),
 
                     // Autocomplete for Party Name
                     Expanded(
@@ -186,23 +188,23 @@ class _PaymentPageState extends State<PaymentPage> {
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.search),
+                      icon: const Icon(Icons.search),
                       onPressed: _fetchPendingBills,
                       tooltip: "Fetch Pending Bills",
                     )
                   ],
                 ),
-                SizedBox(height: 10),
+                const SizedBox(height: 10),
                 TextField(
                   controller: _amountController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                       labelText: "Amount Received/Paid",
                       filled: true,
                       fillColor: Colors.white),
                   onChanged: (val) => setState(() {}),
                 ),
-                SizedBox(height: 10),
+                const SizedBox(height: 10),
                 Text("Used: ₹$usedAmount  |  Not Used: ₹$remaining",
                     style: TextStyle(
                         fontWeight: FontWeight.bold,
@@ -214,9 +216,9 @@ class _PaymentPageState extends State<PaymentPage> {
           // 2. Middle Section: Pending Invoices List
           Expanded(
             child: _isLoadingBills
-                ? Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator())
                 : _pendingBills.isEmpty
-                    ? Center(
+                    ? const Center(
                         child: Text("No pending bills or select party first"))
                     : ListView.builder(
                         itemCount: _pendingBills.length,
@@ -230,7 +232,7 @@ class _PaymentPageState extends State<PaymentPage> {
                           return Card(
                             color:
                                 isSelected ? Colors.green[100] : Colors.white,
-                            margin: EdgeInsets.symmetric(
+                            margin: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 5),
                             child: ListTile(
                               leading: Checkbox(
@@ -263,12 +265,12 @@ class _PaymentPageState extends State<PaymentPage> {
 
           // 3. Bottom Section: Save Button
           Padding(
-            padding: EdgeInsets.all(15),
+            padding: const EdgeInsets.all(15),
             child: ElevatedButton(
               onPressed: _savePayment,
-              child: Text("SAVE TRANSACTION"),
               style: ElevatedButton.styleFrom(
-                  minimumSize: Size(double.infinity, 50)),
+                  minimumSize: const Size(double.infinity, 50)),
+              child: Text("SAVE TRANSACTION"),
             ),
           )
         ],

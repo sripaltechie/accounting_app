@@ -4,6 +4,8 @@ import 'database_helper.dart';
 class DaybookPage extends StatelessWidget {
   final String today = DateTime.now().toString().split(' ')[0];
 
+  const DaybookPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -11,10 +13,12 @@ class DaybookPage extends StatelessWidget {
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: DatabaseHelper.instance.getDaybook(today),
         builder: (context, snapshot) {
-          if (!snapshot.hasData)
-            return Center(child: CircularProgressIndicator());
-          if (snapshot.data!.isEmpty)
-            return Center(child: Text("No transactions today"));
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.data!.isEmpty) {
+            return const Center(child: Text("No transactions today"));
+          }
 
           return ListView.builder(
             itemCount: snapshot.data!.length,
@@ -30,7 +34,7 @@ class DaybookPage extends StatelessWidget {
                 subtitle: Text(item['notes']),
                 trailing: Text("₹${item['amount']}",
                     style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               );
             },
           );

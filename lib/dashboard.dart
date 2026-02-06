@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 class Dashboard extends StatelessWidget {
+  const Dashboard({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Accounting Ledger - Dashboard")),
+      appBar: AppBar(title: const Text("Accounting Ledger - Dashboard")),
       body: GridView.count(
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         crossAxisCount: 2,
         crossAxisSpacing: 15,
         mainAxisSpacing: 15,
@@ -53,7 +55,7 @@ class Dashboard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 50, color: color),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(title,
                 style: TextStyle(
                     fontSize: 18, fontWeight: FontWeight.bold, color: color)),

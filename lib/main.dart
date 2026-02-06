@@ -40,7 +40,7 @@ void _scheduleDailyBackup() {
   var firstTime = DateTime(now.year, now.month, now.day, 7, 0); // 7:00 AM
 
   if (firstTime.isBefore(now)) {
-    firstTime = firstTime.add(Duration(days: 1));
+    firstTime = firstTime.add(const Duration(days: 1));
   }
 
   final initialDelay = firstTime.difference(now);
@@ -48,7 +48,7 @@ void _scheduleDailyBackup() {
   Workmanager().registerPeriodicTask(
     "1",
     autoBackupTask,
-    frequency: Duration(hours: 24),
+    frequency: const Duration(hours: 24),
     initialDelay: initialDelay,
     constraints: Constraints(
       networkType: NetworkType.not_required,
@@ -58,6 +58,8 @@ void _scheduleDailyBackup() {
 }
 
 class AccountingApp extends StatelessWidget {
+  const AccountingApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

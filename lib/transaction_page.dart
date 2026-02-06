@@ -3,6 +3,8 @@ import 'database_helper.dart';
 import 'package:intl/intl.dart';
 
 class TransactionPage extends StatefulWidget {
+  const TransactionPage({super.key});
+
   @override
   _TransactionPageState createState() => _TransactionPageState();
 }
@@ -33,7 +35,7 @@ class _TransactionPageState extends State<TransactionPage> {
   void _save(String type) async {
     if (_partyController.text.isEmpty || _amountController.text.isEmpty) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Fill Party & Amount")));
+          .showSnackBar(const SnackBar(content: Text("Fill Party & Amount")));
       return;
     }
 
@@ -70,7 +72,7 @@ class _TransactionPageState extends State<TransactionPage> {
     return Scaffold(
       appBar: AppBar(title: Text("Add $type Bill")),
       body: Padding(
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         child: ListView(
           children: [
             // Bill Date Picker
@@ -79,48 +81,48 @@ class _TransactionPageState extends State<TransactionPage> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
               title: Text("Bill Date: $displayDate",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              trailing: Icon(Icons.calendar_today, color: Colors.indigo),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              trailing: const Icon(Icons.calendar_today, color: Colors.indigo),
               onTap: _pickDate,
             ),
-            SizedBox(height: 15),
+            const SizedBox(height: 15),
 
             TextField(
                 controller: _partyController,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                     labelText: "Party Name", border: OutlineInputBorder())),
-            SizedBox(height: 15),
+            const SizedBox(height: 15),
 
             TextField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                     labelText: "Total Amount", border: OutlineInputBorder())),
-            SizedBox(height: 15),
+            const SizedBox(height: 15),
 
             // Credit Period (Days)
             TextField(
                 controller: _daysController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                     labelText: "Credit Period (Days)",
                     hintText: "e.g. 30, 45, 60",
                     suffixText: "Days",
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.timelapse))),
 
-            SizedBox(height: 15),
+            const SizedBox(height: 15),
             TextField(
                 controller: _notesController,
                 maxLines: 2,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                     labelText: "Notes", border: OutlineInputBorder())),
-            SizedBox(height: 30),
+            const SizedBox(height: 30),
             ElevatedButton(
               onPressed: () => _save(type),
-              child: Text("SAVE BILL"),
               style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 15)),
+                  padding: const EdgeInsets.symmetric(vertical: 15)),
+              child: Text("SAVE BILL"),
             ),
           ],
         ),
